@@ -116,7 +116,7 @@ result <- nloptr(x0 = initial_parameters, eval_f = log_likelihood, opts = opt, e
 print(result$message)
 print(result$solution)
 
-# store to the parameter vector theta = (t1, t2, t3, t4)
+# store to the parameter vector Theta = (t1, t2, t3, t4, mu_J, sigma_J, lambda)
 t1 <- result$solution[1]
 t2 <- result$solution[2]
 t3 <- result$solution[3]
@@ -125,7 +125,7 @@ mu_J <- result$solution[5]
 sigma_J <- result$solution[6]
 lambda <- result$solution[7]
 
-# calculate GDP parameters
+# calculate GDP SDE parameters
 alpha <- 1/(2-t3) 
 A <- (t2/alpha)^alpha
 sigma <- t4*(2-t3)
@@ -137,7 +137,6 @@ dConsumption <- diff(Consumption)
 dta <- data.frame(dConsumption,dGDP)
 lm_model <- lm(dConsumption ~ dGDP-1 , data = dta)
 summary(lm_model)
-system.time(lm_model)
 
 #find the consumption coefficients using MLE method 
 
@@ -153,7 +152,18 @@ initial_guess <- 0.1
 # Perform MLE using optim function
 mle_result <- optim(initial_guess, neg_log_likelihood, x = dGDP, y = dConsumption, method = "BFGS")
 print(mle_result)
-system.time(mle_result)
+
+# Perform execution time (microseconds) for OLS and MLE
+microbenchmark(
+  OLS = {
+    lm_model <- lm(dConsumption ~ dGDP-1 , data = dta)
+    
+  },
+  MLE = {
+    mle_result <- optim(initial_guess, neg_log_likelihood, x = dGDP, y = dConsumption, method = "BFGS")
+  },
+  times = 1000
+)
 
 # Store to the parameter of equation c(t)=Y(t)*omega2
 omega2 <- lm_model$coefficients[1]/A
@@ -177,6 +187,7 @@ H <- rnorm(Time, mean = mu_J, sd = sigma_J)
 plot(1:Time, H, type = "h")
 mean(H)
 
+# Perform Rejection Sampling method
 J <- numeric(Time)
 for (t in 1:Time){
   U1 <- runif(1, min = 0, max = 1)
@@ -223,6 +234,7 @@ axis(1, at = seq(1990, 2025, by = 5))
 
 c(alpha, delta , rho, sigma, A, lambda, mu_J, sigma_J)
 
+# Calculate the value function and its derivative
 v <- function(x, alpha)
 {
   return(A/(rho*omega2^alpha)+omega2^(-alpha)*(x/A)^(1-alpha)/(1-alpha))
