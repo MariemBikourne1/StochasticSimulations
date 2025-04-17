@@ -20,7 +20,7 @@ file <- read_excel("C:/Users/DELL/OneDrive - Zahi JARIR/Desktop/AK_article/GDP.x
 # Convert 'date_column' to Date class if it's not already
 file$Quarter <- as.Date(file$Quarter)
 
-# Filter out rows where the year is greater than or equal to 2014
+# Filter out rows where the year is greater than or equal to 1990
 file <- file[file$Quarter > as.Date("1990-01-01"), ]
 
 GDP <- ts(file$"GDP",start=c(1990,1),frequency=4)
