@@ -14,8 +14,7 @@ library(caret)
 library(ggplot2)
 library(repr)
 
-file <- read_excel("C:/Users/DELL/OneDrive - Zahi JARIR/Desktop/AK_article/GDP.xlsx", sheet = "Sheet1")
-
+file <- read_excel("Data.xlsx", sheet = "Sheet1")
 
 # Convert 'date_column' to Date class if it's not already
 file$Quarter <- as.Date(file$Quarter)
@@ -23,6 +22,7 @@ file$Quarter <- as.Date(file$Quarter)
 # Filter out rows where the year is greater than or equal to 1990
 file <- file[file$Quarter > as.Date("1990-01-01"), ]
 
+# Define data variables
 GDP <- ts(file$"GDP",start=c(1990,1),frequency=4)
 Consumption <-  ts(file$"Consumption",start=c(1990,1),frequency=4)
 Quarter <-  ts(file$"Quarter",start=c(1990,1),frequency=4)
@@ -31,6 +31,7 @@ Time <- 136
 dt <- 0.25 
 time <- seq(1, Time, by = dt)
 
+# Define the likelihood empty vectors
 f <- numeric(length(GDP))
 L <- numeric(length(GDP))
 M <- numeric(length(GDP))
@@ -40,6 +41,7 @@ expectation_J <- numeric(length(GDP))
 stdev_J <- numeric(length(GDP))
 ll <- numeric(length(GDP))
 
+# Define NLL functions
 G_Y <- function(gamma)
 {
   return(lambda *( ((1+gamma)^(2-alpha) - 1)/(2-alpha) -1 - gamma/2))
@@ -83,17 +85,15 @@ log_likelihood <- function(parameters){
   return(-sum(ll))
 }
 
+# Constraint for positivity for the mean of GDP equation
 constraint <- function(x)
 {
   data <- GDP
-  return( c(x[1] + x[2]*x[3]*(data^(x[3]-1))            )
+  return( c(x[1] + x[2]*x[3]*(data^(x[3]-1)))
   )
 }  
-mean(sd(GDP)/GDP)
-mean(mean(GDP)/GDP)
 
 # Define an initial guess for the parameters
-
 initial_parameters <- c(6,0.09,-0.2,0.006, 0.1, 0.01, 0.2)
 
 lower_bounds <-  c(-Inf, -Inf,-Inf, -Inf,-Inf, -Inf)
@@ -109,16 +109,14 @@ opt <- list(
   maxeval = 20000
 )
 
+# Perform the optimisation method
 result <- nloptr(x0 = initial_parameters, eval_f = log_likelihood, opts = opt, eval_g_ineq = constraint)
-
-
 
 # Extract the estimated parameters
 print(result$message)
 print(result$solution)
 
-
-
+# store to the parameter vector theta = (t1, t2, t3, t4)
 t1 <- result$solution[1]
 t2 <- result$solution[2]
 t3 <- result$solution[3]
@@ -127,47 +125,57 @@ mu_J <- result$solution[5]
 sigma_J <- result$solution[6]
 lambda <- result$solution[7]
 
+# calculate GDP parameters
 alpha <- 1/(2-t3) 
 A <- (t2/alpha)^alpha
 sigma <- t4*(2-t3)
+gamma <- 1 #choosed
 
-gamma <- 1
-
-alpha*sigma*50000*sqrt(dt)
-sd(GDP)*sqrt(dt)
-
-#find the consumption coefficients  
+#find the consumption coefficients using OLS method 
 dGDP <- diff(GDP)
 dConsumption <- diff(Consumption)
-
 dta <- data.frame(dConsumption,dGDP)
-
 lm_model <- lm(dConsumption ~ dGDP-1 , data = dta)
 summary(lm_model)
+system.time(lm_model)
 
+#find the consumption coefficients using MLE method 
 
+# Define the negative log-likelihood function
+neg_log_likelihood <- function(a, x, y) {
+  n <- length(y)
+  sigma_squared <- var(y - a * x)
+  -(-n/2 * log(2 * pi * sigma_squared) - 1/(2 * sigma_squared) * sum((y - a * x)^2))
+}
+
+# Initial guess for the slope parameter 
+initial_guess <- 0.1
+# Perform MLE using optim function
+mle_result <- optim(initial_guess, neg_log_likelihood, x = dGDP, y = dConsumption, method = "BFGS")
+print(mle_result)
+system.time(mle_result)
+
+# Store to the parameter of equation c(t)=Y(t)*omega2
 omega2 <- lm_model$coefficients[1]/A
 
+# Calculate the remaining variables
 delta <- 0.5*(alpha-1)*sigma^2 -omega2 - t1/alpha - G_K(gamma)
 rho <- alpha*(alpha-1)*sigma^2 - t1 - delta - G_Y(gamma)
 
+
+# Graphical representation
 Y <- numeric(Time)
 Z <- numeric(Time)
 Y[1] <- GDP[1]
 Z[1] <- 1
 
-
-
 N <- 1000
 trajectories <- matrix(0, ncol = length(1:Time), nrow = N)
-
 
 # Simulate the jump sizes H_i
 H <- rnorm(Time, mean = mu_J, sd = sigma_J)
 plot(1:Time, H, type = "h")
 mean(H)
-
-
 
 J <- numeric(Time)
 for (t in 1:Time){
@@ -212,7 +220,6 @@ lines(time, GDP/1000, lwd=2)
 legend("topleft", legend = c("GDP", "Random paths", "Mean path"), col = c("black", "lightgray", "black"), lty = c(1,1,2), lwd=c(2,2,1), cex=0.7)
 axis(1, at = seq(1990, 2025, by = 5))
 
-#hist(h, breaks = 30, col = "blue", border = "black", main = "Distribution of Final Values", xlab = "Final Value", ylab = "Frequency")
 
 c(alpha, delta , rho, sigma, A, lambda, mu_J, sigma_J)
 
